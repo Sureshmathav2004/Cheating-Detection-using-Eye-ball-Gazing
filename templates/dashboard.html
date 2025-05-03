@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Eye Tracker Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .stats-card { margin-bottom: 20px; }
+        .card-header { font-weight: bold; }
+        #videoFeed { width: 100%; background: #000; margin-bottom: 20px; }
+        .alert { padding: 0.75rem 1.25rem; margin-bottom: 1rem; }
+        .alert-success { color: #155724; background-color: #d4edda; }
+        .alert-danger { color: #721c24; background-color: #f8d7da; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">Eye Tracker</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h2>Welcome, {{ session.username }}</h2>
+        
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        Eye Tracking Monitor
+                    </div>
+                    <div class="card-body">
+                        <img id="videoFeed" src="{{ url_for('video_feed') }}">
+                        <div class="text-center">
+                            {% if is_tracking %}
+                            <a href="{{ url_for('stop_tracking') }}" class="btn btn-danger">Stop Tracking</a>
+                            {% else %}
+                            <a href="{{ url_for('start_tracking') }}" class="btn btn-success">Start Tracking</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card stats-card">
+                    <div class="card-header bg-primary text-white">
+                        Eye Movement Statistics
+                    </div>
+                    <div class="card-body">
+                        <canvas id="statsChart"></canvas>
+                        <div id="statsData" class="mt-3">
+                            <p>Left: <span id="leftCount">0</span></p>
+                            <p>Right: <span id="rightCount">0</span></p>
+                            <p>Up: <span id="upCount">0</span></p>
+                            <p>Down: <span id="downCount">0</span></p>
+                            <p>Blinks: <span id="blinkCount">0</span></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card stats-card">
+                    <div class="card-header bg-warning text-dark">
+                        Malpractice Alerts
+                    </div>
+                    <div class="card-body">
+                        <div id="alerts">
+                            <p class="alert alert-success" id="statusText">No suspicious activity detected</p>
+                            <div id="specificWarnings" class="hidden">
+                                <p class="alert alert-danger" id="frequentLeftWarning">Excessive left eye movements detected!</p>
+                                <p class="alert alert-danger" id="frequentRightWarning">Excessive right eye movements detected!</p>
+                                <p class="alert alert-danger" id="generalWarning">Suspicious eye movement pattern detected!</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update stats every second
+        function updateStats() {
+            fetch('/stats')
+                .then(response => response.json())
+                .then(data => {
+                    // Update counters
+                    document.getElementById('leftCount').textContent = data.left || 0;
+                    document.getElementById('rightCount').textContent = data.right || 0;
+                    document.getElementById('upCount').textContent = data.up || 0;
+                    document.getElementById('downCount').textContent = data.down || 0;
+                    document.getElementById('blinkCount').textContent = data.blinks || 0;
+                    
+                    // Handle warnings and redirection
+                    const statusText = document.getElementById('statusText');
+                    const specificWarnings = document.getElementById('specificWarnings');
+                    
+                    if (data.warning) {
+                        statusText.className = 'alert alert-danger';
+                        statusText.textContent = 'WARNING: Suspicious activity detected!';
+                        specificWarnings.classList.remove('hidden');
+                        
+                        // Show specific warning
+                        document.querySelectorAll('#specificWarnings p').forEach(el => el.classList.add('hidden'));
+                        if (data.warning === "excessive_left") {
+                            document.getElementById('frequentLeftWarning').classList.remove('hidden');
+                        } else if (data.warning === "excessive_right") {
+                            document.getElementById('frequentRightWarning').classList.remove('hidden');
+                        } else {
+                            document.getElementById('generalWarning').classList.remove('hidden');
+                        }
+                        
+                        // Redirect if threshold exceeded
+                        if (data.redirect && (data.left > 15 || data.right > 15)) {
+                            setTimeout(() => {
+                                window.location.href = '/malpractice_detected';
+                            }, 2000);
+                        }
+                    } else {
+                        statusText.className = 'alert alert-success';
+                        statusText.textContent = 'No suspicious activity detected';
+                        specificWarnings.classList.add('hidden');
+                    }
+                    
+                    updateChart(data);
+                });
+            
+            setTimeout(updateStats, 1000);
+        }
+        
+        // Initialize chart
+        const ctx = document.getElementById('statsChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Left', 'Right', 'Up', 'Down', 'Blinks'],
+                datasets: [{
+                    label: 'Eye Movements',
+                    data: [0, 0, 0, 0, 0],
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.7)',
+                        'rgba(54, 162, 235, 0.7)',
+                        'rgba(255, 206, 86, 0.7)',
+                        'rgba(75, 192, 192, 0.7)',
+                        'rgba(153, 102, 255, 0.7)'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+        
+        function updateChart(data) {
+            chart.data.datasets[0].data = [
+                data.left || 0,
+                data.right || 0,
+                data.up || 0,
+                data.down || 0,
+                data.blinks || 0
+            ];
+            chart.update();
+        }
+        
+        // Start updating stats when page loads
+        window.onload = updateStats;
+    </script>
+</body>
+</html>
