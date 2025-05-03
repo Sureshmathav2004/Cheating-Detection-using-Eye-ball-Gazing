@@ -30,5 +30,5 @@ A real-time eye movement tracking system designed to detect suspicious behavior 
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/eye-tracking-proctoring.git
+   **git clone [https://github.com/yourusername/eye-tracking-proctoring.git**](https://github.com/Sureshmathav2004/Cheating-Detection-using-Eye-ball-Gazing.git)
    cd eye-tracking-proctoring
